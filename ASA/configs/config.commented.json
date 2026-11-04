@@ -1,0 +1,41 @@
+// PatrolRepair config. Same values as config.json, with comments. Comments are allowed in config.json too.
+// Reload after editing with PatrolRepair.Reload (admin console or RCON).
+{
+  "General": {
+    // Level actors looked at per second by a scan. A full scan of a busy map takes a few seconds.
+    "ScanActorsPerTick": 5000,
+    // Unreal units (300 = one foundation). An unmounted rider that moved less than this between two scans
+    // is counted as standing still.
+    "StillDistance": 300,
+    // Patrol managers listed in chat, most unmounted riders first. The log always gets all of them.
+    "ReportManagers": 10
+  },
+  "Patrols": {
+    // Parent class of every patrol rider (Lost Colony Thralls).
+    "RiderFamily": "Thrall_Character_BP_Base_C",
+    // Path part shared by every patrol mount class.
+    "MountPathContains": "/Thrall/Characters/RideableCreatures/",
+    // ...or the class name ending of a patrol mount (Raptor_Character_BP_Thrall_C and the like).
+    "MountClassEndsWith": "_Thrall_C"
+  },
+  "Clean": {
+    // Creatures removed per second by PatrolRepair.Clean confirm or an automatic clean.
+    "RemovalsPerTick": 10,
+    // Remove riders and unridden mounts that no patrol manager is linked to. Every save load leaves some
+    // behind, and nothing reclaims them.
+    "RemoveUnlinked": true,
+    // Remove patrol managers' riders on foot and mounts nobody rides; mounted pairs stay. A save load takes
+    // every rider off its mount and only some get back on; the rest fill the manager's roster so it never
+    // sends out new patrols. The managers refill with fresh mounted patrols within minutes.
+    "RemoveUnpaired": true,
+    // 0 = off. Otherwise a scan and clean run on this many minutes, starting one interval after load.
+    "AutoCleanMinutes": 0,
+    // 0 = off. Otherwise one scan and clean this many minutes after the server (or plugin) loads, because
+    // every load breaks the patrols again.
+    "CleanAfterBootMinutes": 10,
+    // After every scan, set a patrol manager's linked count (DirectLinkDinoCount) back to 0 when it is below 0.
+    // Over time the count drifts negative, and a manager with a negative count sends out no patrols at all.
+    // A count of 0 or above is never touched.
+    "ResetNegativeLinkedCount": true
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "General": {
+    "ScanActorsPerTick": 5000,
+    "StillDistance": 300,
+    "ReportManagers": 10
+  },
+  "Patrols": {
+    "RiderFamily": "Thrall_Character_BP_Base_C",
+    "MountPathContains": "/Thrall/Characters/RideableCreatures/",
+    "MountClassEndsWith": "_Thrall_C"
+  },
+  "Clean": {
+    "RemovalsPerTick": 10,
+    "RemoveUnlinked": true,
+    "RemoveUnpaired": true,
+    "AutoCleanMinutes": 0,
+    "CleanAfterBootMinutes": 10,
+    "ResetNegativeLinkedCount": true
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "FullName": "Patrol Repair",
+  "Description": "Reports Lost Colony city patrols and, after each boot, removes riders and mounts a save load left unpaired so the patrols respawn",
+  "Version": 1.0,
+  "MinApiVersion": 1.19,
+  "Dependencies": []
+}
