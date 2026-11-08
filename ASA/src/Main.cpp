@@ -19,8 +19,10 @@
 //     off from their manager for good. Removing them (Clean.RemoveUnpaired, Clean.RemoveUnlinked) lets
 //     the managers send out fresh mounted patrols. With "confirm" the plan is queued and removed
 //     Clean.RemovalsPerTick per second, each creature checked again just before. Clean.CleanAfterBootMinutes
-//     runs a scan and clean once after load, Clean.AutoCleanMinutes on an interval. Nothing else changes
-//     the world.
+//     runs a scan and clean once after load, Clean.AutoCleanMinutes on an interval.
+//   - A manager whose linked count (DirectLinkDinoCount) has gone negative sends out no patrols at all.
+//     Clean.ResetNegativeLinkedCount sets it back to 0 after each scan. Apart from that, the cleans and
+//     ForceReset, nothing else changes the world.
 //
 // Everything runs on the game thread (AsaApi's one-second timer callback and the commands).
 

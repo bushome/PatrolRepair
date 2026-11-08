@@ -331,8 +331,9 @@ namespace PatrolRepair
 	// A save load takes every patrol rider off its mount and only some get back on; the rest stand next
 	// to empty mounts, fill the manager's roster and keep it from sending out new patrols. Each load also
 	// cuts some riders off from their manager for good. A clean removes what is not a mounted pair, so
-	// the managers send out fresh patrols (the same result as the game's own patrol reset, without
-	// touching the pairs that work). Mission creatures and mounted pairs are never removed.
+	// the managers send out fresh patrols without touching the pairs that work, as long as their
+	// linked count isn't negative (see Clean.ResetNegativeLinkedCount). Mission creatures and mounted
+	// pairs are never removed.
 	inline CleanPlan PlanClean(const std::vector<Sighting>& sightings, bool remove_unlinked, bool remove_unpaired)
 	{
 		CleanPlan plan;

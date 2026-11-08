@@ -29,8 +29,9 @@ save load leaves broken, so the managers send out fresh mounted patrols.
    - riders and unridden mounts with no manager link (`RemoveUnlinked`). Every load leaves about 200 of
      these; nothing reclaims them.
 
-   The managers refill with fresh mounted patrols within minutes, the same way they do after the game's
-   own patrol reset. Mounted pairs and outpost garrisons are never removed.
+   The managers refill with fresh mounted patrols within minutes, as long as their linked count isn't
+   negative (`Clean.ResetNegativeLinkedCount` resets it). Mounted pairs and outpost garrisons are never
+   removed.
 7. `PatrolRepair.Clean confirm` queues the plan and removes `RemovalsPerTick` creatures per second. Each one
    is checked again just before: one that died, changed manager, got onto a mount or got a rider since the
    scan is left alone. `CleanAfterBootMinutes` runs one scan and clean that long after load;
