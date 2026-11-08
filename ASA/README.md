@@ -44,6 +44,8 @@ on a fresh save too, so the large negative counts on old saves do not matter. Th
 
 ## Build
 
+**Shared API checkout (optional):** the project builds against `extern\AsaApi` by default. To build several plugins against one shared AsaApi checkout instead, set the MSBuild property `AsaApiDir` to that folder, for example in a `Directory.Build.props` placed above the repo; the submodule then doesn't need to be checked out.
+
 Requirements: Visual Studio 2026 with the "Desktop development with C++" workload (v145 toolset), and Git.
 
 AsaApi is a git submodule at `extern\AsaApi`. After cloning the repository:
@@ -63,6 +65,8 @@ The result is `out\PatrolRepair\`, containing `PatrolRepair.dll`, its `.pdb`, `P
 `config.commented.json` and `THIRD-PARTY-NOTICES.md`.
 
 ## Install
+
+**VC++ runtime:** built with the v145 toolset (Visual Studio 2026) and `_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR`, the same as AsaApi, so it also runs on servers with an older Visual C++ runtime. If the server crashes inside `std::mutex` or reports a missing `msvcp140.dll` entry point after installing, update the VC++ runtime DLLs in `ShooterGame\Binaries\Win64` (the latest files are in [ASABinaries](https://github.com/bushome/ASABinaries)) or install the current Visual C++ Redistributable (x64).
 
 1. Copy the `out\PatrolRepair` folder to `ShooterGame\Binaries\Win64\ArkApi\Plugins\`. The folder and the DLL
    must keep the same name.
