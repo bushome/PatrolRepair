@@ -37,5 +37,21 @@
     // Over time the count drifts negative, and a manager with a negative count sends out no patrols at all.
     // A count of 0 or above is never touched.
     "ResetNegativeLinkedCount": true
+  },
+  "Spawning": {
+    // A patrol manager loaded from a save can come back with no spawn entries for its groups
+    // (NPCSpawnEntriesGroupSmall/Medium/Large empty): it keeps sending out groups that have no members, so
+    // the city stays empty. When a group is sent out with none, the manager's empty ones are set from its
+    // class default and the group gets the one for its size. Each manager fixed is logged once.
+    "RestoreSpawnEntries": true,
+    // A saved patrol group with nothing left of it (no creature carries its id, none waiting to be spawned
+    // again, no group object) still holds one of the manager's size slots. A save made while the game counts
+    // groups it spawned nothing for (on Lost Colony while no player is online) leaves a full set of them;
+    // after the restart every manager is at its cap and never sends out a patrol again. After each scan,
+    // these are dissolved through the manager's own OnGroupDissolved, which frees the slots.
+    "DissolveOrphanGroups": true,
+    // Minutes after load for one report-only scan (no clean), so the above runs without waiting for a
+    // clean or a command. 0: off.
+    "ScanAfterBootMinutes": 3
   }
 }

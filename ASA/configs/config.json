@@ -16,5 +16,10 @@
     "AutoCleanMinutes": 0,
     "CleanAfterBootMinutes": 10,
     "ResetNegativeLinkedCount": true
+  },
+  "Spawning": {
+    "RestoreSpawnEntries": true,
+    "DissolveOrphanGroups": true,
+    "ScanAfterBootMinutes": 3
   }
 }

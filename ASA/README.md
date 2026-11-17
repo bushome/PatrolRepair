@@ -22,6 +22,51 @@ save load leaves broken, so the managers send out fresh mounted patrols.
    bookkeeping: `[linked count N, links M, reset version S/L]`. `linked count` is how many creatures the
    manager believes it has out, `links` how many it still holds a link to, and the reset version is the one
    stored in the save against the one this game build expects (the game resets patrols when they differ).
+   Patrol managers also show their Blueprint's group bookkeeping, read by name from the class:
+   `[groups small 8/8, medium 4/4, large 0/0 (at cap), group objects 0, saved S/M/L 8/4/0 (12 with no live
+   member), validated, delay 0 s]`. The manager sends out a group of a size only while that size's count is
+   below its cap, so `(at cap)` means it sends out nothing. The counts aren't saved: each load rebuilds them
+   from the saved groups (`SavedGroups`, the only part kept in the save), and only a group breaking up lowers
+   them. `group objects` is how many groups the manager holds in memory; `with no live member` counts saved
+   groups no scanned creature belongs to. The log adds a `Saved patrol groups` section listing each saved
+   group (`#id size members/latent live linked/anywhere`). If a field can't be found, the line says
+   `groups not read` and why.
+   - A `Patrol group objects` section lists each group object in memory with its own counts, which can
+     differ from the saved entry: `#id size NumMembers/latent members listed/valid/awake nav N s`, then
+     what keeps the game from breaking the group up. The game breaks up a group when no member has a
+     target, its navigation time is at least 180 s old (or never set), its latent count is 0 and its awake
+     members are at least its NumMembers; the group is only counted down if its id is in the saved groups
+     with a latent count of 0. `blocked by nothing (should dissolve)` means none of these hold it.
+   - A `Patrol spawn points of sizes below cap` section covers each manager that is below its cap on a
+     size. Every spawn point of that size is put through the tests the game makes before it uses one: the
+     game's own player, tame and structure distance checks, and no creature within 500 (small), 800
+     (medium) or 1200 (large) units. Points marked `*` are still in the manager's remaining list; only
+     those are tried until the list is empty. The manager line adds `spawn points S/M/L a/b/c`.
+   - A `Patrol points` section lists each manager's patrol points: how many of their connections a new
+     group of each size could start on (`free S/M/L`), and which group ids occupy the rest, each marked as
+     a group object in memory, a saved group, both, or `unknown`. A new group starts only at a patrol point
+     with a free connection, so `free S/M/L 0/0/0` means the manager can send nothing out even with
+     usable spawn points.
+   - Each patrol manager line ends with its spawn entries: the container class its Blueprint hands the
+     game for a group of each size (`NPCSpawnEntriesGroupSmall/Medium/Large`), as
+     `[spawn entries S/M/L A/B/C (class default)]` when all three match the class default, otherwise each
+     size with `(default X)` where it differs. `none` means empty: a group sent out with no container
+     has no members.
+   - The game's `SpawnPatrolGroup` is hooked. The log shows the first three calls per manager per load
+     (then every 100th): the group id, the container it got, where, and how many creatures it spawned.
+     Each container's creature classes are listed once. A patrol manager loaded from a save can hand the
+     game no container at all, so it keeps sending out groups with no members and the city stays empty.
+     With `Spawning.RestoreSpawnEntries`, the manager's empty spawn entries are set from its class default
+     (logged once per manager: `Spawn entries of ... were empty; set from the class default: ...`), and
+     the call gets the container for its group's size. Its trace line then says `(restored)`.
+   - Saved patrol groups with nothing left of them (no creature carries the group id, none waiting to be
+     spawned again, no group object) still hold one of the manager's size slots, and nothing in the game
+     ever frees them. On Lost Colony the game counts a group even when it spawns nothing (no player
+     online); a save made then (a shutdown save, say) leaves a full set of empty groups, and after the
+     restart every manager is at its cap and sends out no patrols. With `Spawning.DissolveOrphanGroups`,
+     each scan dissolves them through the manager's own `OnGroupDissolved` and logs `Dissolved N saved
+     patrol group(s) of ...` with the counts after. `Spawning.ScanAfterBootMinutes` runs one report-only
+     scan after load so this happens without a command.
 6. `PatrolRepair.Clean` plans from the last scan: everything that is not a mounted pair.
    - a manager's riders on foot and mounts nobody rides (`RemoveUnpaired`). A save load takes every rider
      off its mount; once a player is near only about a quarter get back on. The rest fill the manager's
@@ -101,6 +146,9 @@ Comments are allowed. `configs\config.commented.json` has the same values with e
 | `Clean.AutoCleanMinutes` | 0 | 0 = off; otherwise a scan and clean run on this interval, the first one interval after load. |
 | `Clean.CleanAfterBootMinutes` | 10 | 0 = off; otherwise one scan and clean this many minutes after load. |
 | `Clean.ResetNegativeLinkedCount` | true | After every scan, sets a patrol manager's linked count (`DirectLinkDinoCount`) back to 0 when it is below 0. A manager with a negative count sends out no patrols; this is what left the city empty. Counts of 0 or above are never touched. Each reset is logged. |
+| `Spawning.RestoreSpawnEntries` | true | When a patrol manager sends out a group with no spawn entries container, its empty `NPCSpawnEntriesGroupSmall/Medium/Large` are set from the class default and the group gets the container for its size. Without it, such a manager's groups have no members. Each manager fixed is logged once. |
+| `Spawning.DissolveOrphanGroups` | true | After every scan, dissolves saved patrol groups that have nothing left of them (no creature with the group id, none latent, no group object), through the manager's own `OnGroupDissolved`. These hold the manager's size slots for good; a full set of them keeps a manager from sending out patrols. Each manager fixed is logged. |
+| `Spawning.ScanAfterBootMinutes` | 3 | Minutes after load for one report-only scan (no clean), so `DissolveOrphanGroups` runs without a command. 0 turns it off. |
 
 ## Commands
 
