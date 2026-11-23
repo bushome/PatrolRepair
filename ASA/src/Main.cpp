@@ -62,6 +62,17 @@
 
 namespace
 {
+	// General.Logging = false silences every line this plugin writes to the API log and the console.
+	bool g_logging_enabled = true;
+
+	struct GatedLog
+	{
+		template <typename... Args> void info(Args&&... args) const { if (g_logging_enabled) Log::GetLog()->info(std::forward<Args>(args)...); }
+		template <typename... Args> void warn(Args&&... args) const { if (g_logging_enabled) Log::GetLog()->warn(std::forward<Args>(args)...); }
+		template <typename... Args> void error(Args&&... args) const { if (g_logging_enabled) Log::GetLog()->error(std::forward<Args>(args)...); }
+	};
+	const GatedLog* PluginLog() { static const GatedLog gate; return &gate; }
+
 	using namespace PatrolRepair;
 	using Clock = std::chrono::steady_clock;
 
@@ -431,11 +442,11 @@ namespace
 		}
 
 		if (!layout.error.empty())
-			Log::GetLog()->warn("Patrol groups of {} not readable: {}", cls->NameField().ToString().ToString(), layout.error);
+			PluginLog()->warn("Patrol groups of {} not readable: {}", cls->NameField().ToString().ToString(), layout.error);
 		else if (!layout.saved_error.empty())
-			Log::GetLog()->warn("Saved patrol groups of {} not readable: {}", cls->NameField().ToString().ToString(), layout.saved_error);
+			PluginLog()->warn("Saved patrol groups of {} not readable: {}", cls->NameField().ToString().ToString(), layout.saved_error);
 		if (!layout.spawn_error.empty())
-			Log::GetLog()->warn("Patrol spawn points of {} not readable: {}", cls->NameField().ToString().ToString(), layout.spawn_error);
+			PluginLog()->warn("Patrol spawn points of {} not readable: {}", cls->NameField().ToString().ToString(), layout.spawn_error);
 		return g_patrol_layouts.emplace(cls, layout).first->second;
 	}
 
@@ -475,7 +486,7 @@ namespace
 		{
 			const std::string name = AsaApi::IApiUtils::GetClassBlueprint(cls).ToString();
 			layout.error += " on " + name;
-			Log::GetLog()->warn("Patrol group objects of {} not readable: {}. Its properties: {}", name, layout.error,
+			PluginLog()->warn("Patrol group objects of {} not readable: {}. Its properties: {}", name, layout.error,
 				PropertyNames(cls, 80));
 		}
 		return g_group_layouts.emplace(cls, layout).first->second;
@@ -751,7 +762,7 @@ namespace
 				layout.error = "PatrolPointConnection has size 0";
 		}
 		if (!layout.error.empty())
-			Log::GetLog()->warn("Patrol point connections of {} not readable: {}", cls->NameField().ToString().ToString(), layout.error);
+			PluginLog()->warn("Patrol point connections of {} not readable: {}", cls->NameField().ToString().ToString(), layout.error);
 		return g_connection_layouts.emplace(cls, layout).first->second;
 	}
 
@@ -865,14 +876,14 @@ namespace
 		auto* container = static_cast<UNPCSpawnEntriesContainer*>(cls->ClassDefaultObjectField());
 		if (container == nullptr)
 		{
-			Log::GetLog()->warn("SpawnPatrolGroup container {}: no default object", name);
+			PluginLog()->warn("SpawnPatrolGroup container {}: no default object", name);
 			return;
 		}
 		auto* entry_struct = static_cast<UScriptStruct*>(Globals::StaticFindObject(UScriptStruct::StaticClass(), nullptr,
 			L"/Script/ShooterGame.NPCSpawnEntry", false));
 		if (entry_struct == nullptr || entry_struct->PropertiesSizeField() != static_cast<int>(sizeof(FNPCSpawnEntry)))
 		{
-			Log::GetLog()->warn("SpawnPatrolGroup container {}: {} entries; FNPCSpawnEntry layout differs from the API header, not listed",
+			PluginLog()->warn("SpawnPatrolGroup container {}: {} entries; FNPCSpawnEntry layout differs from the API header, not listed",
 				name, container->NPCSpawnEntriesField().Num());
 			return;
 		}
@@ -895,7 +906,7 @@ namespace
 				text += (j == 0 ? "" : ", ") + SoftPath(soft) + (is_loaded ? "" : " (NOT LOADED)");
 			}
 		}
-		Log::GetLog()->info("SpawnPatrolGroup container {}: {} entries, {} of {} creature classes loaded{}", name, entries.Num(),
+		PluginLog()->info("SpawnPatrolGroup container {}: {} entries, {} of {} creature classes loaded{}", name, entries.Num(),
 			loaded, classes, text);
 	}
 
@@ -918,7 +929,7 @@ namespace
 		for (int i = 0; i < 3; ++i)
 			layout.offset[i] = OffsetOf(cls, std::string("NPCSpawnEntriesGroup") + kSizes[i], static_cast<int>(sizeof(UClass*)), layout.error);
 		if (!layout.error.empty())
-			Log::GetLog()->warn("Patrol spawn entries of {} not readable: {}", cls->NameField().ToString().ToString(), layout.error);
+			PluginLog()->warn("Patrol spawn entries of {} not readable: {}", cls->NameField().ToString().ToString(), layout.error);
 		return g_container_layouts.emplace(cls, layout).first->second;
 	}
 
@@ -995,12 +1006,12 @@ namespace
 		{
 			const std::string name = manager->NameField().ToString().ToString();
 			if (!changed.empty())
-				Log::GetLog()->info("Spawn entries of {} were empty; set from the class default: {}", name, changed);
+				PluginLog()->info("Spawn entries of {} were empty; set from the class default: {}", name, changed);
 			else
-				Log::GetLog()->warn("SpawnPatrolGroup on {} got no container, but the manager's spawn entries are not empty "
+				PluginLog()->warn("SpawnPatrolGroup on {} got no container, but the manager's spawn entries are not empty "
 					"(or the class default is empty too)", name);
 			if (result == nullptr)
-				Log::GetLog()->warn("SpawnPatrolGroup on {}: size of group #{} not found ({}); this group goes out as the game sent it, "
+				PluginLog()->warn("SpawnPatrolGroup on {}: size of group #{} not found ({}); this group goes out as the game sent it, "
 					"the next ones read the restored fields", name, group_id, size);
 		}
 		return result;
@@ -1167,7 +1178,7 @@ namespace
 			}
 			catch (const std::exception& error)
 			{
-				Log::GetLog()->warn("Spawn entries restore failed: {}", error.what());
+				PluginLog()->warn("Spawn entries restore failed: {}", error.what());
 			}
 		}
 		std::string checks;
@@ -1200,7 +1211,7 @@ namespace
 			if (trace.calls > kTraceFirstCalls && trace.calls % kTraceEvery != 0 && !first_success && !checks_changed)
 				return;
 			LogContainer(container);
-			Log::GetLog()->info(
+			PluginLog()->info(
 				"SpawnPatrolGroup on {}: group #{}, container {}, at {:.0f} {:.0f} {:.0f}, volume index {}, spawning id after {}: "
 				"{} spawned (call {} since load, {} spawned in all); {}; {}",
 				manager->NameField().ToString().ToString(), group_id,
@@ -1210,7 +1221,7 @@ namespace
 		}
 		catch (const std::exception& error)
 		{
-			Log::GetLog()->warn("SpawnPatrolGroup trace failed: {}", error.what());
+			PluginLog()->warn("SpawnPatrolGroup trace failed: {}", error.what());
 		}
 	}
 
@@ -1239,8 +1250,9 @@ namespace
 			}
 
 			Settings settings = ParseSettings(root);
+			g_logging_enabled = settings.logging; // before the warnings below, so they honour it too
 			for (const std::string& warning : settings.warnings)
-				Log::GetLog()->warn("Config: {}", warning);
+				PluginLog()->warn("Config: {}", warning);
 			g_settings = std::move(settings);
 			g_settings_loaded = true;
 			g_seconds_to_auto = g_settings.auto_clean_minutes * 60;  // first automatic clean one interval from now
@@ -1381,7 +1393,7 @@ namespace
 				g_queue.push_back({ ref->second, manager_of[entry.creature], entry.role == Role::Mount });
 		}
 		if (!g_queue.empty())
-			Log::GetLog()->info("Clean queued: {}", DescribePlan(plan));
+			PluginLog()->info("Clean queued: {}", DescribePlan(plan));
 		return g_queue.size();
 	}
 
@@ -1456,7 +1468,7 @@ namespace
 		}
 		if (g_queue_next >= g_queue.size())
 		{
-			Log::GetLog()->info("Clean finished: removed {} creature(s), {} skipped (gone, ridden or relinked since the scan)",
+			PluginLog()->info("Clean finished: removed {} creature(s), {} skipped (gone, ridden or relinked since the scan)",
 				g_removed, g_skipped);
 			g_queue.clear();
 			g_queue_next = 0;
@@ -1535,12 +1547,12 @@ namespace
 				float& linked = *GetNativePointerField<float*>(manager, "ANPCZoneManager.DirectLinkDinoCount");
 				if (linked >= 0.0f)
 					continue;
-				Log::GetLog()->info("Linked count of {} was {:.0f}; set to 0", manager->NameField().ToString().ToString(), linked);
+				PluginLog()->info("Linked count of {} was {:.0f}; set to 0", manager->NameField().ToString().ToString(), linked);
 				linked = 0.0f;
 				++fixed;
 			}
 			if (fixed > 0)
-				Log::GetLog()->info("Reset the negative linked count of {} patrol manager(s)", fixed);
+				PluginLog()->info("Reset the negative linked count of {} patrol manager(s)", fixed);
 		}
 
 		// Saved groups with nothing left of them hold the manager's size slots for good (see OrphanGroups);
@@ -1569,18 +1581,18 @@ namespace
 						text << (i == 0 ? "#" : ", #") << ids[i];
 					if (ids.size() > 12)
 						text << ", ...";
-					Log::GetLog()->info("Dissolved {} saved patrol group(s) of {} with nothing left of them ({}); groups now "
+					PluginLog()->info("Dissolved {} saved patrol group(s) of {} with nothing left of them ({}); groups now "
 						"small {}/{}, medium {}/{}, large {}/{}, saved {} (was {})", ids.size(), info.name, text.str(),
 						after.groups[0], after.max_groups[0], after.groups[1], after.max_groups[1], after.groups[2],
 						after.max_groups[2], after.saved.size(), info.saved.size());
 				}
 				catch (const std::exception& error)
 				{
-					Log::GetLog()->warn("Dissolving saved patrol groups of {} failed: {}", info.name, error.what());
+					PluginLog()->warn("Dissolving saved patrol groups of {} failed: {}", info.name, error.what());
 				}
 			}
 			if (dissolved > 0)
-				Log::GetLog()->info("Dissolved {} saved patrol group(s) with nothing left of them", dissolved);
+				PluginLog()->info("Dissolved {} saved patrol group(s) with nothing left of them", dissolved);
 		}
 		g_last_refs.swap(g_refs);
 		g_refs.clear();
@@ -1596,7 +1608,7 @@ namespace
 		g_group_linked.clear();
 		g_group_any.clear();
 
-		Log::GetLog()->info("Patrol scan ({:.1f} s):\n{}{}\n{}\n{}\n{}\n{}", g_last_seconds, g_last_full, g_last_links,
+		PluginLog()->info("Patrol scan ({:.1f} s):\n{}{}\n{}\n{}\n{}\n{}", g_last_seconds, g_last_full, g_last_links,
 			FormatSavedGroups(g_last_managers), FormatGroupObjects(g_last_managers), FormatSpawnChecks(g_last_managers),
 			FormatPatrolPoints(g_last_managers));
 
@@ -1605,7 +1617,7 @@ namespace
 			g_auto_scan = false;
 			const size_t queued = QueuePlan();
 			if (queued > 0)
-				Log::GetLog()->info("Auto clean: queued {} creature(s)", queued);
+				PluginLog()->info("Auto clean: queued {} creature(s)", queued);
 		}
 	}
 
@@ -1679,7 +1691,7 @@ namespace
 				++g_seconds_since_load >= g_settings.clean_after_boot_minutes * 60 && !g_scan_running && g_queue.empty())
 			{
 				g_boot_clean_done = true;
-				Log::GetLog()->info("Clean after boot: scanning");
+				PluginLog()->info("Clean after boot: scanning");
 				StartScan();
 				g_auto_scan = true;
 			}
@@ -1689,7 +1701,7 @@ namespace
 				if (++g_seconds_since_load_scan >= g_settings.scan_after_boot_minutes * 60 && !g_scan_running && g_queue.empty())
 				{
 					g_boot_scan_done = true;
-					Log::GetLog()->info("Scan after boot");
+					PluginLog()->info("Scan after boot");
 					StartScan();
 				}
 			}
@@ -1705,7 +1717,7 @@ namespace
 		}
 		catch (const std::exception& exception)
 		{
-			Log::GetLog()->error("Scan failed: {}", exception.what());
+			PluginLog()->error("Scan failed: {}", exception.what());
 			g_scan_running = false;
 			g_auto_scan = false;
 			g_queue.clear();
@@ -1758,7 +1770,7 @@ namespace
 			if (g_queue.empty())
 				return "No clean is running.";
 			const size_t left = g_queue.size() - g_queue_next;
-			Log::GetLog()->info("Clean cancelled: removed {}, {} skipped, {} left", g_removed, g_skipped, left);
+			PluginLog()->info("Clean cancelled: removed {}, {} skipped, {} left", g_removed, g_skipped, left);
 			g_queue.clear();
 			g_queue_next = 0;
 			return "Clean cancelled; " + std::to_string(g_removed) + " removed, " + std::to_string(left) + " left alone.";
@@ -1831,19 +1843,19 @@ namespace
 			if (count_mode)
 			{
 				float& linked = *GetNativePointerField<float*>(manager, "ANPCZoneManager.DirectLinkDinoCount");
-				Log::GetLog()->info("ForceReset count: {} linked count {:.0f} -> 0", manager->NameField().ToString().ToString(), linked);
+				PluginLog()->info("ForceReset count: {} linked count {:.0f} -> 0", manager->NameField().ToString().ToString(), linked);
 				linked = 0.0f;
 				++marked;
 				continue;
 			}
 			int& saved = *GetNativePointerField<int*>(manager, "ANPCZoneManager.SaveForceResetPatrolsVersion");
 			const int expected = *GetNativePointerField<int*>(manager, "ANPCZoneManager.LoadForceResetPatrolsVersion");
-			Log::GetLog()->info("ForceReset: {} reset version {}/{} -> 0/{}", manager->NameField().ToString().ToString(),
+			PluginLog()->info("ForceReset: {} reset version {}/{} -> 0/{}", manager->NameField().ToString().ToString(),
 				saved, expected, expected);
 			saved = 0;
 			++marked;
 		}
-		Log::GetLog()->info("ForceReset{}: changed {} patrol manager(s), {} gone since the scan", count_mode ? " count" : "", marked, gone);
+		PluginLog()->info("ForceReset{}: changed {} patrol manager(s), {} gone since the scan", count_mode ? " count" : "", marked, gone);
 		std::ostringstream out;
 		if (count_mode)
 		{
@@ -1873,7 +1885,7 @@ namespace
 		std::string error;
 		if (!ReloadSettings(error))
 		{
-			Log::GetLog()->error("Config reload failed: {}", error);
+			PluginLog()->error("Config reload failed: {}", error);
 			return "PatrolRepair reload failed, old settings kept: " + error;
 		}
 		std::string text = "PatrolRepair reloaded";
@@ -1959,11 +1971,11 @@ namespace
 extern "C" __declspec(dllexport) void Plugin_Init()
 {
 	Log::Get().Init(PROJECT_NAME);
-	Log::GetLog()->info("PatrolRepair loaded (built {} {})", __DATE__, __TIME__);
+	PluginLog()->info("PatrolRepair loaded (built {} {})", __DATE__, __TIME__);
 
 	std::string error;
 	if (!ReloadSettings(error))
-		Log::GetLog()->error("Config not loaded: {}; fix config.json and run {}", error, kCmdReload);
+		PluginLog()->error("Config not loaded: {}; fix config.json and run {}", error, kCmdReload);
 
 	AsaApi::GetCommands().AddConsoleCommand(kCmdReport, &ConsoleReport);
 	AsaApi::GetCommands().AddConsoleCommand(kCmdClean, &ConsoleClean);
@@ -1978,7 +1990,7 @@ extern "C" __declspec(dllexport) void Plugin_Init()
 	g_spawn_hooked = AsaApi::GetHooks().SetHook(kSpawnPatrolGroupFunc, &Hook_ANPCZoneManager_SpawnPatrolGroup,
 		&ANPCZoneManager_SpawnPatrolGroup_original);
 	if (!g_spawn_hooked)
-		Log::GetLog()->warn("Could not hook {}; SpawnPatrolGroup trace and spawn entries restore off", kSpawnPatrolGroupFunc);
+		PluginLog()->warn("Could not hook {}; SpawnPatrolGroup trace and spawn entries restore off", kSpawnPatrolGroupFunc);
 	g_inner_hooked[0] = AsaApi::GetHooks().SetHook(kIsValidEntryFunc, &Hook_ANPCZoneManager_IsValidNPCEntry,
 		&ANPCZoneManager_IsValidNPCEntry_original);
 	g_inner_hooked[1] = AsaApi::GetHooks().SetHook(kSpawnFromEntriesFunc, &Hook_ANPCZoneManager_SpawnFromEntries,
@@ -1989,7 +2001,7 @@ extern "C" __declspec(dllexport) void Plugin_Init()
 	const char* const inner_names[4] = { kIsValidEntryFunc, kSpawnFromEntriesFunc, kSpawnNpcFunc, kInjectLatentFunc };
 	for (int i = 0; i < 4; ++i)
 		if (!g_inner_hooked[i])
-			Log::GetLog()->warn("Could not hook {}; its count in the SpawnPatrolGroup trace stays 0", inner_names[i]);
+			PluginLog()->warn("Could not hook {}; its count in the SpawnPatrolGroup trace stays 0", inner_names[i]);
 }
 
 // Called by AsaApi when the plugin is unloaded.

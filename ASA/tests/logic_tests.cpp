@@ -35,6 +35,9 @@ static Settings Parse(const char* text)
 
 static void TestParsing()
 {
+	CHECK(Parse("{}").logging);
+	CHECK(!Parse(R"({ "General": { "Logging": false } })").logging);
+	CHECK(Parse(R"({ "General": { "Logging": "no" } })").logging); // not a boolean: default kept
 	bool threw = false;
 	try { Parse("[]"); } catch (const std::exception&) { threw = true; }
 	CHECK(threw);

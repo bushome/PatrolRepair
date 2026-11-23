@@ -1,5 +1,6 @@
 {
   "General": {
+    "Logging": true,
     "ScanActorsPerTick": 5000,
     "StillDistance": 300,
     "ReportManagers": 10

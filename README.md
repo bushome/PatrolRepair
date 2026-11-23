@@ -59,6 +59,49 @@ or, in an existing clone:
 git submodule update --init --recursive
 ```
 
+## For Wildcard: Lost Colony patrol managers stop spawning after a restart (game 98.6)
+
+Symptom: on a Lost Colony save, the city has no patrols after a server restart. Every `NPCZoneManager_Patrols_C`
+reports its small/medium/large group counts at their caps, with no group objects and no creatures. A fresh save
+spawns patrols until its first restart. Patrols worked on 97.18.
+
+**Observed on 98.6 dedicated servers (log output from PatrolRepair's trace of `ANPCZoneManager::SpawnPatrolGroup`):**
+
+- `SpawnPatrolGroup` returns before spawning anything unless its container is set, `bUsesManualSpawning` is true,
+  the group id is above 0 and, when `GIsLostColonyMap` is set, the world settings' player controller actor list
+  is not empty (read from the 98.6 server binary).
+- With nobody connected, all 30 managers called it with `player controllers 0`: 0 creatures spawned, none of
+  `IsValidNPCEntry`, `SpawnFromEntries`, `SpawnNPC` or `InjectLatentSpawn` reached, and `SpawningPatrolGroupID`
+  left at its call value instead of being reset to -1.
+- After a player joined, calls from the same managers on the same save reached `SpawnNPC`, spawned riders, and
+  reset the id to -1.
+- On the boot after a save made like that, every manager had its counts at the cap (for example small 7/7,
+  medium 3/3, large 2/2), `SavedGroups` entries with 0 members and 0 latent spawns, no creature carrying their
+  ids, and no group object, and none of them tried to spawn again for the whole session.
+
+**From the Blueprint, read in the 97.16 DevKit (it has not been updated to 98.x, so this is how 97.16 works;
+the 98.6 numbers above are consistent with it):** `DoSpawnPatrolGroup` increments the size's group count and adds
+a `SavedGroups` entry (the only SaveGame variable on the manager) before it calls the native function.
+`BeginPlay` rebuilds `NumSmallGroups`, `NumMediumGroups` and `NumLargeGroups` from `SavedGroups`. A group is only
+counted down by `OnGroupDissolved`, which needs a group object, and group objects are only recreated from
+members that load back in. A group that was counted, saved and never had members therefore holds its slot
+permanently, and `ReceiveTick` stops calling `DoSpawnPatrolGroup` for that size at the cap.
+
+**Sequence (two boots on the Lost Colony test server, one save):** after a boot where nobody connected (every
+call `player controllers 0`), then a restart, all 30 managers came up at their caps with saved groups that had
+no members and no group objects. After a boot where a player joined 11 minutes in and stayed 13 minutes, then
+a restart, only 11 such groups were left across all managers. So while no player is connected the Blueprint
+keeps creating groups that the native function refuses to populate, a save made then stores them, and after
+the restart they fill every cap. Not a controlled test: the group counts were not read just before each
+shutdown save, and PatrolRepair's `DissolveOrphanGroups` was not yet in the first build.
+
+**Possible fixes on the game side:** only count and save a group when the native call spawned something, or skip
+`DoSpawnPatrolGroup` while the player list is empty, or drop saved groups with no members and no latent spawns
+when the counts are rebuilt at `BeginPlay`.
+
+**Workaround:** PatrolRepair's `Spawning.DissolveOrphanGroups` (see above) calls the manager's own
+`OnGroupDissolved` for those groups; with it, patrols came back on a loaded 98.6 save and across a restart.
+
 ## Development
 
 Developed with AI assistance (Claude). Every change was reviewed and tested on a dedicated test server

@@ -2,6 +2,8 @@
 // Reload after editing with PatrolRepair.Reload (admin console or RCON).
 {
   "General": {
+    // false: the plugin writes nothing at all to the API log or the console (errors included).
+    "Logging": true,
     // Level actors looked at per second by a scan. A full scan of a busy map takes a few seconds.
     "ScanActorsPerTick": 5000,
     // Unreal units (300 = one foundation). An unmounted rider that moved less than this between two scans

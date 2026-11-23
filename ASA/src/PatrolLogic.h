@@ -34,6 +34,7 @@ namespace PatrolRepair
 
 	struct Settings
 	{
+		bool logging = true;             // false: nothing is written to the API log or console
 		int scan_actors_per_tick = 5000;
 		std::string rider_family = "Thrall_Character_BP_Base_C";             // parent class of every patrol rider
 		std::string mount_path = "/Thrall/Characters/RideableCreatures/";    // path part of every patrol mount
@@ -104,6 +105,7 @@ namespace PatrolRepair
 			throw std::runtime_error("config.json must be a JSON object");
 		Settings settings;
 		const nlohmann::json general = root.value("General", nlohmann::json::object());
+		settings.logging = detail::ReadBool(general, "Logging", settings.logging, settings.warnings);
 		settings.scan_actors_per_tick = detail::ReadInt(general, "ScanActorsPerTick", settings.scan_actors_per_tick, 100, settings.warnings);
 		settings.still_distance = detail::ReadInt(general, "StillDistance", static_cast<int>(settings.still_distance), 0, settings.warnings);
 		settings.report_managers = detail::ReadInt(general, "ReportManagers", settings.report_managers, 1, settings.warnings);

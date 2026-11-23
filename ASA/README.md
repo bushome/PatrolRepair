@@ -134,6 +134,7 @@ Comments are allowed. `configs\config.commented.json` has the same values with e
 
 | Setting | Default | Meaning |
 |---|---|---|
+| `General.Logging` | true | `false` turns off everything the plugin writes to the API log and the console, errors included. Commands still answer in chat and RCON. |
 | `General.ScanActorsPerTick` | 5000 | Level actors a scan looks at per second. |
 | `General.StillDistance` | 300 | Unreal units (300 = one foundation). An unmounted rider that moved less than this between two scans counts as not moving. |
 | `General.ReportManagers` | 10 | Managers shown in chat, most unmounted riders first. The log gets all of them. |
