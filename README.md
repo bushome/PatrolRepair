@@ -11,7 +11,7 @@
 |_| \_\  \___| | .__/   \__,_| |_| |_|              /\     /\
                |_|
 ```
-Server plugin for ARK: Survival Ascended's Lost Colony city patrols. Three things break them, and none of them
+Server plugin for ARK: Survival Ascended's Lost Colony city patrols. Four things break them, and none of them
 fix themselves:
 
 - **Managers stop spawning.** Each patrol manager keeps a count of the creatures it has out
@@ -23,11 +23,18 @@ fix themselves:
   from 388 mounted pairs to 95.
 - **Riders lose their manager.** Every load cuts some riders off from their manager for good, and nothing
   reclaims them.
+- **Managers fill up with empty groups (game 98.6).** While no player is online, Lost Colony's patrol spawn
+  returns without spawning anything, but the manager still counts the group and saves it. A save made then
+  (a shutdown save, say) holds a full set of empty groups. On the next load every manager starts at its group
+  cap, no creature ever links back to those groups, and nothing in the game dissolves them, so the manager
+  never sends out a patrol again. A fresh save worked only until its first restart.
 
 PatrolRepair reports every patrol manager, including ones with no creatures. After every scan it sets any
-negative count back to 0, and its clean removes everything that is not a mounted pair, so the managers send out
-fresh mounted patrols. By default a scan and clean run ten minutes after each boot; `AutoCleanMinutes` adds them
-on an interval.
+negative count back to 0 and dissolves saved groups that have nothing left of them (`Spawning.DissolveOrphanGroups`,
+through the manager's own `OnGroupDissolved`), and its clean removes everything that is not a mounted pair, so the
+managers send out fresh mounted patrols. By default a report-only scan runs three minutes after each boot
+(`Spawning.ScanAfterBootMinutes`), which frees the empty groups, and a scan and clean run ten minutes after boot;
+`AutoCleanMinutes` adds them on an interval.
 
 `PatrolRepair.Report` generates a report of the status of the patrol managers and attached NPC counts. 
 (`Clean.ResetNegativeLinkedCount`, on by default). `PatrolRepair.Clean`
