@@ -730,17 +730,20 @@ namespace PatrolRepair
 		if (report.unlinked.riders + report.unlinked.mounts > 0)
 			out << "No manager link: " << FormatStats(report.unlinked) << "\n";
 
-		int shown = 0;
-		for (const ManagerStats& stats : report.managers)
+		if (max_managers > 0)
 		{
-			if (shown++ >= max_managers)
-				break;
-			const auto found = info.find(stats.manager);
-			out << "  " << (found != info.end() ? FormatManagerInfo(found->second) : std::string("manager"));
-			out << ": " << FormatStats(stats) << "\n";
+			int shown = 0;
+			for (const ManagerStats& stats : report.managers)
+			{
+				if (shown++ >= max_managers)
+					break;
+				const auto found = info.find(stats.manager);
+				out << "  " << (found != info.end() ? FormatManagerInfo(found->second) : std::string("manager"));
+				out << ": " << FormatStats(stats) << "\n";
+			}
+			if (static_cast<int>(report.managers.size()) > max_managers)
+				out << "  ... " << report.managers.size() - max_managers << " more in the log\n";
 		}
-		if (static_cast<int>(report.managers.size()) > max_managers)
-			out << "  ... " << report.managers.size() - max_managers << " more in the log\n";
 
 		// Patrol managers found in the level with no patrol creature linked to them: an empty roster.
 		std::vector<const ManagerInfo*> empty;
@@ -753,8 +756,10 @@ namespace PatrolRepair
 			if (!has_creatures)
 				empty.push_back(&manager);
 		}
-		std::sort(empty.begin(), empty.end(), [](const ManagerInfo* a, const ManagerInfo* b) { return a->name < b->name; });
 		out << "Patrol managers with no patrol creatures: " << empty.size() << "\n";
+		if (max_managers == 0)
+			return out.str();
+		std::sort(empty.begin(), empty.end(), [](const ManagerInfo* a, const ManagerInfo* b) { return a->name < b->name; });
 		int listed = 0;
 		for (const ManagerInfo* manager : empty)
 		{

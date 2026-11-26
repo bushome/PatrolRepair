@@ -47,6 +47,7 @@
 #include <chrono>
 #include <cmath>
 #include <fstream>
+#include <limits>
 #include <map>
 #include <sstream>
 #include <string>
@@ -157,8 +158,7 @@ namespace
 	bool g_boot_clean_done = false;
 	int g_seconds_since_load_scan = 0;  // for Spawning.ScanAfterBootMinutes
 	bool g_boot_scan_done = false;
-	std::string g_last_text;
-	std::string g_last_full;
+	Report g_last_report;
 	std::string g_last_links;
 	double g_last_seconds = 0;
 	Clock::time_point g_last_finished{};
@@ -1526,9 +1526,7 @@ namespace
 			}
 		}
 
-		const Report report = BuildReport(g_sightings, g_settings.still_distance);
-		g_last_text = FormatReport(report, g_managers, g_settings.report_managers);
-		g_last_full = FormatReport(report, g_managers, 1 << 30);
+		g_last_report = BuildReport(g_sightings, g_settings.still_distance);
 		g_last_finished = Clock::now();
 		g_last_seconds = std::chrono::duration<double>(g_last_finished - g_scan_started).count();
 		g_have_report = true;
@@ -1608,9 +1606,7 @@ namespace
 		g_group_linked.clear();
 		g_group_any.clear();
 
-		PluginLog()->info("Patrol scan ({:.1f} s):\n{}{}\n{}\n{}\n{}\n{}", g_last_seconds, g_last_full, g_last_links,
-			FormatSavedGroups(g_last_managers), FormatGroupObjects(g_last_managers), FormatSpawnChecks(g_last_managers),
-			FormatPatrolPoints(g_last_managers));
+		PluginLog()->info("Patrol scan ({:.1f} s):\n{}", g_last_seconds, FormatReport(g_last_report, g_last_managers, 0));
 
 		if (g_auto_scan)
 		{
@@ -1729,8 +1725,12 @@ namespace
 	// Commands
 	// ------------------------------------------------------------------------------------------
 
-	std::string ReportCommandText()
+	std::string ReportCommandText(const std::string& argument)
 	{
+		std::istringstream words(argument);
+		std::string mode;
+		words >> mode;
+		const bool verbose = ToLower(mode) == "verbose";
 		if (!g_settings_loaded)
 			return "PatrolRepair has no valid config; fix config.json and run " + std::string(kCmdReload);
 		if (g_scan_running)
@@ -1740,13 +1740,24 @@ namespace
 		if (g_have_report)
 		{
 			const double age = std::chrono::duration<double>(Clock::now() - g_last_finished).count();
-			out << "Patrol scan from " << static_cast<int>(age) << " s ago:\n" << g_last_text << g_last_links << "\n";
+			out << "Patrol scan from " << static_cast<int>(age) << " s ago:\n"
+				<< FormatReport(g_last_report, g_last_managers, verbose ? g_settings.report_managers : 0);
+			if (verbose)
+			{
+				out << g_last_links << "\n";
+				PluginLog()->info("Patrol scan details ({:.1f} s):\n{}{}\n{}\n{}\n{}\n{}", g_last_seconds,
+					FormatReport(g_last_report, g_last_managers, (std::numeric_limits<int>::max)()), g_last_links,
+					FormatSavedGroups(g_last_managers), FormatGroupObjects(g_last_managers), FormatSpawnChecks(g_last_managers),
+					FormatPatrolPoints(g_last_managers));
+			}
+			else
+				out << "For manager details, run " << kCmdReport << " verbose.\n";
 		}
 		else
 		{
 			out << "No patrol scan yet.\n";
 		}
-		out << "Started a new scan; run " << kCmdReport << " again in a few seconds for it.";
+		out << "Started a new scan. Run " << kCmdReport << (verbose ? " verbose" : "") << " again in a few seconds.";
 		StartScan();
 		return out.str();
 	}
@@ -1860,11 +1871,11 @@ namespace
 		if (count_mode)
 		{
 			out << "Set the linked count to 0 on " << marked << " patrol manager(s) (" << gone << " gone since the scan). Run "
-				<< kCmdReport << " twice: it should show linked count 0.";
+				<< kCmdReport << " verbose twice: it should show linked count 0.";
 			return out.str();
 		}
 		out << "Marked " << marked << " patrol manager(s) for reset (" << gone << " gone since the scan). Run "
-			<< kCmdReport << " twice: it should show reset version 0/1. Then saveworld and restart.";
+			<< kCmdReport << " verbose twice: it should show reset version 0/1. Then saveworld and restart.";
 		return out.str();
 	}
 
@@ -1913,10 +1924,10 @@ namespace
 		return player;
 	}
 
-	void ConsoleReport(APlayerController* controller, FString*, bool)
+	void ConsoleReport(APlayerController* controller, FString* command, bool)
 	{
 		if (AShooterPlayerController* admin = AdminFrom(controller))
-			SendAdmin(admin, ReportCommandText());
+			SendAdmin(admin, ReportCommandText(CommandArgument(command)));
 	}
 
 	void ConsoleClean(APlayerController* controller, FString* command, bool)
@@ -1948,7 +1959,7 @@ namespace
 
 	void RconReport(RCONClientConnection* connection, RCONPacket* packet, UWorld*)
 	{
-		RconReply(connection, packet, ReportCommandText());
+		RconReply(connection, packet, ReportCommandText(CommandArgument(&packet->Body)));
 	}
 
 	void RconClean(RCONClientConnection* connection, RCONPacket* packet, UWorld*)

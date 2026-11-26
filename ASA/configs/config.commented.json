@@ -9,7 +9,7 @@
     // Unreal units (300 = one foundation). An unmounted rider that moved less than this between two scans
     // is counted as standing still.
     "StillDistance": 300,
-    // Patrol managers listed in chat, most unmounted riders first. The log always gets all of them.
+    // Patrol managers shown by Report verbose, most unmounted riders first. That command logs all of them.
     "ReportManagers": 10
   },
   "Patrols": {

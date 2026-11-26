@@ -6,7 +6,7 @@ save load leaves broken, so the managers send out fresh mounted patrols.
 
 ## How it works
 
-1. `PatrolRepair.Report` prints the last finished scan and starts a new one.
+1. `PatrolRepair.Report` summarizes the last finished scan and starts a new one. Use `Report verbose` for manager details.
 2. A scan looks at `ScanActorsPerTick` level actors per second, so a busy map takes a few seconds and no
    single tick does all the work.
 3. Every living, unowned patrol creature is counted: **riders** (classes deriving from `RiderFamily`, the
@@ -88,6 +88,23 @@ standing still, and 212 more riders without a manager link. The managers' `linke
 on a fresh save too, so the large negative counts on old saves do not matter. The game's own
 `HandleResetPatrols`, called on a manager of an old save, changed nothing, so the plugin does not use it.
 
+## Thrall gear and item skins
+
+Patrol riders carry ordinary items with **official item skins** on them, and those skins are part of how the
+Thralls look and fight. Seen on a Lost Colony test save (2026-11-23), logged as each item was rebuilt from the
+save (`UPrimalItem.InventoryLoadedFromSaveGame`):
+
+- Armor: `PrimalItemSkin_Thrall_T0_*` and `PrimalItemSkin_Thrall_T3_*` (shirt, shirt with cape, pants,
+  gloves, boots) on hide, metal and arctic armor.
+- Weapons: `PrimalItemSkin_Thrall_Sword_C`, `PrimalItemSkin_ThrallTekSword_C`, `PrimalItemSkin_Thrall_Whip_C`,
+  `PrimalItemSkin_Thrall_MachinedSniper_C`, on normal and `_Cursed` weapons.
+
+A weapon skin replaces the item's weapon class, so the rider spawns a Thrall weapon (`WeapSword_Cursed_Thrall_C`,
+`WeapSword_Tek_Thrall_C`) rather than the plain one. Removing the skin from a Thrall's item would change its
+weapon and look. Any plugin that strips or blocks item skins must leave NPC gear alone. CosmeticsDisabler does
+this by team: it only strips items held by players or tribes (team 50000 and up), which skips the Thralls and
+every other map's NPCs. This plugin never touches the riders' inventories.
+
 ## Build
 
 **Shared API checkout (optional):** the project builds against `extern\AsaApi` by default. To build several plugins against one shared AsaApi checkout instead, set the MSBuild property `AsaApiDir` to that folder, for example in a `Directory.Build.props` placed above the repo; the submodule then doesn't need to be checked out.
@@ -121,10 +138,8 @@ The result is `out\PatrolRepair\`, containing `PatrolRepair.dll`, its `.pdb`, `P
 ## Using it
 
 1. Run `PatrolRepair.Report` once to start the first scan, then again a few seconds later to see it.
-2. Run it again later: from the second scan on, the report can tell which unmounted riders have stopped
-   moving.
-3. Compare a fresh save with one that has run for days. The full report, every manager included, is in the
-   plugin log after each scan.
+2. Run `PatrolRepair.Report verbose` later to see which unmounted riders have stopped moving since the previous scan.
+3. Compare a fresh save with one that has run for days. `Report verbose` writes the full manager report to the plugin log.
 4. `PatrolRepair.Clean` to see what would go, `PatrolRepair.Clean confirm` to remove it,
    `PatrolRepair.Clean cancel` to stop a clean that is running. Try it on a copy of a save first.
 
@@ -137,7 +152,7 @@ Comments are allowed. `configs\config.commented.json` has the same values with e
 | `General.Logging` | true | `false` turns off everything the plugin writes to the API log and the console, errors included. Commands still answer in chat and RCON. |
 | `General.ScanActorsPerTick` | 5000 | Level actors a scan looks at per second. |
 | `General.StillDistance` | 300 | Unreal units (300 = one foundation). An unmounted rider that moved less than this between two scans counts as not moving. |
-| `General.ReportManagers` | 10 | Managers shown in chat, most unmounted riders first. The log gets all of them. |
+| `General.ReportManagers` | 10 | Managers shown by `Report verbose`, most unmounted riders first. That command logs all managers. |
 | `Patrols.RiderFamily` | `Thrall_Character_BP_Base_C` | Parent class of every patrol rider. |
 | `Patrols.MountPathContains` | `/Thrall/Characters/RideableCreatures/` | Path part of patrol mount classes. |
 | `Patrols.MountClassEndsWith` | `_Thrall_C` | Class name ending of the other patrol mounts (`Raptor_Character_BP_Thrall_C` and the like). |
@@ -157,7 +172,8 @@ Admin console commands (`cheat PatrolRepair.Report`); all of them also work over
 
 | Command | What it does |
 |---|---|
-| `PatrolRepair.Report` | Shows the last finished scan and starts a new one. |
+| `PatrolRepair.Report` | Shows patrol and garrison counts from the last scan and starts a new scan. |
+| `PatrolRepair.Report verbose` | Adds manager and link details and writes the full scan to the log. |
 | `PatrolRepair.Clean [confirm\|cancel]` | Shows what a clean of the last scan would remove; `confirm` removes it (the scan must be at most 10 minutes old), `cancel` stops a running clean. |
 | `PatrolRepair.ForceReset [confirm]` | Experimental. Shows how many patrol managers the last scan found; `confirm` sets each one's saved patrol reset version (`SaveForceResetPatrolsVersion`) to 0 so the game may reset their patrols on the next load. Takes effect only after `saveworld` and a restart. `count confirm` instead sets each manager's linked count (`DirectLinkDinoCount`) to 0 right away. Test on a copy of a save first. |
 | `PatrolRepair.Reload` | Re-reads `config.json`. A broken file keeps the old settings and reports the error. |

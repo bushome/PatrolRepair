@@ -36,7 +36,7 @@ managers send out fresh mounted patrols. By default a report-only scan runs thre
 (`Spawning.ScanAfterBootMinutes`), which frees the empty groups, and a scan and clean run ten minutes after boot;
 `AutoCleanMinutes` adds them on an interval.
 
-`PatrolRepair.Report` generates a report of the status of the patrol managers and attached NPC counts. 
+`PatrolRepair.Report` summarizes the last patrol scan and starts a new one. `PatrolRepair.Report verbose` shows manager details and logs the full scan.
 (`Clean.ResetNegativeLinkedCount`, on by default). `PatrolRepair.Clean`
 shows what a clean would remove; `PatrolRepair.Clean confirm` removes it a few per second.
 `PatrolRepair.ForceReset count confirm` sets every manager's count to 0 by hand.

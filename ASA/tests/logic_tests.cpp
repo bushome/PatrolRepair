@@ -215,6 +215,9 @@ static void TestReport()
 	empty.enabled = true; empty.spawned = 0; empty.min_desired = 8; empty.max_npc = 20; empty.entries = 3;
 	info[9] = empty;
 	info[2].has_zone = true;
+	const std::string summary = FormatReport(report, info, 0);
+	CHECK(summary.find("Patrol managers with no patrol creatures: 1") != std::string::npos);
+	CHECK(summary.find("NPCZoneManager_") == std::string::npos && summary.find("more in the log") == std::string::npos);
 	const std::string full = FormatReport(report, info, 1 << 30);
 	CHECK(full.find("Patrol managers with no patrol creatures: 1") != std::string::npos);
 	CHECK(full.find("NPCZoneManager_Patrols_C_Empty [linked count -12, links 0, reset version 1/1] [at 100 -200 30, enabled, spawned 0, desired 8, max 20, entries 3]") != std::string::npos);
