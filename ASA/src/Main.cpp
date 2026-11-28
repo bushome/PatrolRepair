@@ -285,7 +285,7 @@ namespace
 
 	bool IsPatrolManager(AActor* actor)
 	{
-		UClass* cls = reinterpret_cast<UObject*>(actor)->ClassField();
+		UClass* cls = actor->ClassField();
 		if (cls == nullptr)
 			return false;
 		const auto found = g_patrol_manager_classes.find(cls);
@@ -1001,7 +1001,7 @@ namespace
 			}
 		}
 		const int size = SavedGroupSize(manager, group_id);
-		UClass* result = size >= 0 && size < 3 ? ContainerAt(manager, layout.offset[size]) : nullptr;
+		UClass* group_container = size >= 0 && size < 3 ? ContainerAt(manager, layout.offset[size]) : nullptr;
 		if (g_restore_logged.insert(Key(manager)).second)
 		{
 			const std::string name = manager->NameField().ToString().ToString();
@@ -1010,123 +1010,20 @@ namespace
 			else
 				PluginLog()->warn("SpawnPatrolGroup on {} got no container, but the manager's spawn entries are not empty "
 					"(or the class default is empty too)", name);
-			if (result == nullptr)
+			if (group_container == nullptr)
 				PluginLog()->warn("SpawnPatrolGroup on {}: size of group #{} not found ({}); this group goes out as the game sent it, "
 					"the next ones read the restored fields", name, group_id, size);
 		}
-		return result;
+		return group_container;
 	}
 
+	// Notes from the retired 98.6 spawn investigation.
 	// Inner calls of one SpawnPatrolGroup call (log only): which of the game's spawn steps it reaches and
 	// what each returns. Only counted while a SpawnPatrolGroup call is running (all on the game thread).
 	// IsValidNPCEntry is also hooked by other plugins; a refusal by one of them may not reach this hook.
-	constexpr const char* kIsValidEntryFunc = "ANPCZoneManager.IsValidNPCEntry(FNPCSpawnEntry&)";
-	constexpr const char* kSpawnFromEntriesFunc =
-		"ANPCZoneManager.SpawnFromEntries(int,TArray<FNPCSpawnEntry,TSizedDefaultAllocator<32>>&,UE::Math::TVector<double>&,"
-		"TArray<APrimalDinoCharacter*,TSizedDefaultAllocator<32>>*,float)";
-	constexpr const char* kSpawnNpcFunc =
-		"ANPCZoneManager.SpawnNPC(bool,bool&,TSoftClassPtr<APrimalDinoCharacter>,UE::Math::TVector<double>,bool,int,float,bool,float,float,float,float,TSubclassOf<UPrimalColorSet>,UE::Math::TVector<double>,TSubclassOf<UPrimalEscortComponent>)";
-	constexpr const char* kInjectLatentFunc =
-		"AHibernationManager.InjectLatentSpawn(FLatentSpawnParams&,ANPCZoneManager*,FPrimalDinoDBEntry*)";
-	struct InnerTrace
-	{
-		bool active = false;
-		int valid_calls = 0, valid_refused = 0;
-		int from_entries = 0, from_entries_null = 0, from_entries_creatures = 0;
-		int from_entries_volume = 0, from_entries_count = -1;
-		int spawn_npc = 0, spawn_npc_null = 0, spawn_npc_flag = 0;
-		std::string first_npc;  // the first SpawnNPC call: class, where, its bool arguments and result
-		int latent = 0;
-	};
-	InnerTrace g_inner;
-	bool g_inner_hooked[4] = {};
-
-	std::string FormatInner(const InnerTrace& t)
-	{
-		std::ostringstream out;
-		out << "inside: IsValidNPCEntry " << t.valid_calls << " (refused " << t.valid_refused << "), SpawnFromEntries "
-			<< t.from_entries;
-		if (t.from_entries > 0)
-			out << " (volume " << t.from_entries_volume << ", " << t.from_entries_count << " entries, returned none "
-				<< t.from_entries_null << ", " << t.from_entries_creatures << " creatures listed)";
-		out << ", SpawnNPC " << t.spawn_npc;
-		if (t.spawn_npc > 0)
-			out << " (returned none " << t.spawn_npc_null << ", out flag set " << t.spawn_npc_flag << "; first: " << t.first_npc << ")";
-		out << ", InjectLatentSpawn " << t.latent;
-		return out.str();
-	}
-
-	DECLARE_HOOK(ANPCZoneManager_IsValidNPCEntry, bool, ANPCZoneManager* manager, FNPCSpawnEntry* entry)
-	{
-		const bool result = ANPCZoneManager_IsValidNPCEntry_original(manager, entry);
-		if (g_inner.active)
-		{
-			++g_inner.valid_calls;
-			g_inner.valid_refused += result ? 0 : 1;
-		}
-		return result;
-	}
-
-	DECLARE_HOOK(ANPCZoneManager_SpawnFromEntries, APrimalDinoCharacter*, ANPCZoneManager* manager, int volume_entry,
-		TArray<FNPCSpawnEntry>* entries, FVector* at, TArray<APrimalDinoCharacter*>* all_spawned, float yaw)
-	{
-		const int before = all_spawned != nullptr ? all_spawned->Num() : 0;
-		APrimalDinoCharacter* result = ANPCZoneManager_SpawnFromEntries_original(manager, volume_entry, entries, at, all_spawned, yaw);
-		if (g_inner.active)
-		{
-			if (g_inner.from_entries == 0)
-			{
-				g_inner.from_entries_volume = volume_entry;
-				g_inner.from_entries_count = entries != nullptr ? entries->Num() : -1;
-			}
-			++g_inner.from_entries;
-			g_inner.from_entries_null += result == nullptr ? 1 : 0;
-			if (all_spawned != nullptr)
-				g_inner.from_entries_creatures += all_spawned->Num() - before;
-		}
-		return result;
-	}
-
+	// the first SpawnNPC call: class, where, its bool arguments and result
 	// By-value TSoftClassPtr, vectors and TSubclassOf arrive as pointers to copies; the returned creature is
 	// passed through whatever it is.
-	DECLARE_HOOK(ANPCZoneManager_SpawnNPC, APrimalDinoCharacter*, ANPCZoneManager* manager, bool first_flag, bool* out_flag,
-		TSoftClassPtr<APrimalDinoCharacter>* npc_class, FVector* at, bool override_level, int level_offset, float level_multiplier,
-		bool level_offset_first, float water_min, float extent_z, float yaw, float water_max, void* colors, FVector* offset, void* escort)
-	{
-		APrimalDinoCharacter* result = ANPCZoneManager_SpawnNPC_original(manager, first_flag, out_flag, npc_class, at, override_level,
-			level_offset, level_multiplier, level_offset_first, water_min, extent_z, yaw, water_max, colors, offset, escort);
-		if (g_inner.active)
-		{
-			const bool flag = out_flag != nullptr && *out_flag;
-			if (g_inner.spawn_npc == 0)
-			{
-				try
-				{
-					char where[96];
-					std::snprintf(where, sizeof(where), "%.0f %.0f %.0f", at != nullptr ? at->X : 0.0, at != nullptr ? at->Y : 0.0,
-						at != nullptr ? at->Z : 0.0);
-					g_inner.first_npc = (npc_class != nullptr ? SoftPath(*npc_class) : std::string("no class")) + " at " + where +
-						", first argument " + (first_flag ? "true" : "false") + ", out flag " + (flag ? "true" : "false") + ", " +
-						(result != nullptr ? "spawned" : "returned none");
-				}
-				catch (const std::exception& error)
-				{
-					g_inner.first_npc = std::string("not described: ") + error.what();
-				}
-			}
-			++g_inner.spawn_npc;
-			g_inner.spawn_npc_null += result == nullptr ? 1 : 0;
-			g_inner.spawn_npc_flag += flag ? 1 : 0;
-		}
-		return result;
-	}
-
-	DECLARE_HOOK(AHibernationManager_InjectLatentSpawn, void, void* hibernation, void* params, ANPCZoneManager* zone, void* entry)
-	{
-		if (g_inner.active)
-			++g_inner.latent;
-		AHibernationManager_InjectLatentSpawn_original(hibernation, params, zone, entry);
-	}
 
 	// The game's SpawnPatrolGroup (98.6, read from the server binary) returns without spawning unless the
 	// container is set, bUsesManualSpawning is true, the group id is above 0 and, on Lost Colony
@@ -1193,10 +1090,7 @@ namespace
 				checks = std::string("checks not read: ") + error.what();
 			}
 		}
-		g_inner = InnerTrace{};
-		g_inner.active = true;
 		ANPCZoneManager_SpawnPatrolGroup_original(manager, container_arg, at, rotation, volume_index, group_id);
-		g_inner.active = false;
 		if (!readable)
 			return;
 		try
@@ -1213,11 +1107,11 @@ namespace
 			LogContainer(container);
 			PluginLog()->info(
 				"SpawnPatrolGroup on {}: group #{}, container {}, at {:.0f} {:.0f} {:.0f}, volume index {}, spawning id after {}: "
-				"{} spawned (call {} since load, {} spawned in all); {}; {}",
+				"{} spawned (call {} since load, {} spawned in all); {}",
 				manager->NameField().ToString().ToString(), group_id,
 				container_arg == nullptr ? std::string("argument missing") : ClassName(container) + (restored ? " (restored)" : ""),
 				at != nullptr ? at->X : 0.0, at != nullptr ? at->Y : 0.0, at != nullptr ? at->Z : 0.0, volume_index,
-				manager->SpawningPatrolGroupIDField(), spawned, trace.calls, trace.spawned, checks, FormatInner(g_inner));
+				manager->SpawningPatrolGroupIDField(), spawned, trace.calls, trace.spawned, checks);
 		}
 		catch (const std::exception& error)
 		{
@@ -1320,9 +1214,6 @@ namespace
 		const uint64_t self = Key(dino);
 		const FVector location = dino->GetLocation();
 		sighting.creature = self;
-		sighting.x = location.X;
-		sighting.y = location.Y;
-		sighting.z = location.Z;
 		g_positions_now[self] = location;
 		const auto before = g_positions_before.find(self);
 		if (before != g_positions_before.end())
@@ -1375,22 +1266,25 @@ namespace
 	}
 
 	// Queues the plan of the last finished scan. Returns how many creatures were queued.
-	size_t QueuePlan()
+	size_t QueuePlan(const CleanPlan& plan)
 	{
-		const CleanPlan plan = CurrentPlan();
-		std::unordered_map<uint64_t, uint64_t> manager_of;
-		for (const Sighting& sighting : g_last_sightings)
-			manager_of[sighting.creature] = sighting.manager;
-
 		g_queue.clear();
 		g_queue_next = 0;
 		g_removed = 0;
 		g_skipped = 0;
+		if (plan.remove.empty())
+			return 0;
+
+		std::unordered_map<uint64_t, uint64_t> manager_by_creature;
+		manager_by_creature.reserve(g_last_sightings.size());
+		for (const Sighting& sighting : g_last_sightings)
+			manager_by_creature[sighting.creature] = sighting.manager;
+
 		for (const CleanEntry& entry : plan.remove)
 		{
 			const auto ref = g_last_refs.find(entry.creature);
 			if (ref != g_last_refs.end())
-				g_queue.push_back({ ref->second, manager_of[entry.creature], entry.role == Role::Mount });
+				g_queue.push_back({ ref->second, manager_by_creature[entry.creature], entry.role == Role::Mount });
 		}
 		if (!g_queue.empty())
 			PluginLog()->info("Clean queued: {}", DescribePlan(plan));
@@ -1452,12 +1346,12 @@ namespace
 		int budget = g_settings.removals_per_tick;
 		while (budget > 0 && g_queue_next < g_queue.size())
 		{
-			QueuedCreature& item = g_queue[g_queue_next++];
-			APrimalDinoCharacter* creature = item.creature.Get();
+			QueuedCreature& queued = g_queue[g_queue_next++];
+			APrimalDinoCharacter* creature = queued.creature.Get();
 			if (creature == nullptr || creature->IsDead() || creature->TargetingTeamField() >= kFirstPlayerTeam ||
 				creature->OwnerMissionField() != nullptr ||
-				Key(creature->DirectLinkNPCZoneManagerField()) != item.manager ||
-				(item.mount ? IsRidden(creature) : IsOnMount(creature)))
+				Key(creature->DirectLinkNPCZoneManagerField()) != queued.manager ||
+				(queued.mount ? IsRidden(creature) : IsOnMount(creature)))
 			{
 				++g_skipped;
 				continue;
@@ -1530,8 +1424,8 @@ namespace
 		g_last_finished = Clock::now();
 		g_last_seconds = std::chrono::duration<double>(g_last_finished - g_scan_started).count();
 		g_have_report = true;
-		g_last_managers = g_managers;
-		g_last_sightings = g_sightings;
+		g_last_managers.swap(g_managers);
+		g_last_sightings.swap(g_sightings);
 
 		// A negative linked count stops a patrol manager from sending out patrols; set it back to 0.
 		if (g_settings.reset_negative_count)
@@ -1599,6 +1493,7 @@ namespace
 
 		g_positions_before.swap(g_positions_now);
 		g_positions_now.clear();
+		g_managers.clear();
 		g_sightings.clear();
 		g_rider_index.clear();
 		g_mount_index.clear();
@@ -1606,12 +1501,13 @@ namespace
 		g_group_linked.clear();
 		g_group_any.clear();
 
-		PluginLog()->info("Patrol scan ({:.1f} s):\n{}", g_last_seconds, FormatReport(g_last_report, g_last_managers, 0));
+		if (g_logging_enabled)
+			PluginLog()->info("Patrol scan ({:.1f} s):\n{}", g_last_seconds, FormatReport(g_last_report, g_last_managers, 0));
 
 		if (g_auto_scan)
 		{
 			g_auto_scan = false;
-			const size_t queued = QueuePlan();
+			const size_t queued = QueuePlan(CurrentPlan());
 			if (queued > 0)
 				PluginLog()->info("Auto clean: queued {} creature(s)", queued);
 		}
@@ -1745,10 +1641,11 @@ namespace
 			if (verbose)
 			{
 				out << g_last_links << "\n";
-				PluginLog()->info("Patrol scan details ({:.1f} s):\n{}{}\n{}\n{}\n{}\n{}", g_last_seconds,
-					FormatReport(g_last_report, g_last_managers, (std::numeric_limits<int>::max)()), g_last_links,
-					FormatSavedGroups(g_last_managers), FormatGroupObjects(g_last_managers), FormatSpawnChecks(g_last_managers),
-					FormatPatrolPoints(g_last_managers));
+				if (g_logging_enabled)
+					PluginLog()->info("Patrol scan details ({:.1f} s):\n{}{}\n{}\n{}\n{}\n{}", g_last_seconds,
+						FormatReport(g_last_report, g_last_managers, (std::numeric_limits<int>::max)()), g_last_links,
+						FormatSavedGroups(g_last_managers), FormatGroupObjects(g_last_managers), FormatSpawnChecks(g_last_managers),
+						FormatPatrolPoints(g_last_managers));
 			}
 			else
 				out << "For manager details, run " << kCmdReport << " verbose.\n";
@@ -1805,7 +1702,7 @@ namespace
 		}
 		if (age > kMaxPlanAgeSeconds)
 			return out.str() + "That scan is too old; run " + kCmdReport + " twice, then " + kCmdClean + " confirm.";
-		const size_t queued = QueuePlan();
+		const size_t queued = QueuePlan(plan);
 		out << "Queued " << queued << "; about " << (queued + g_settings.removals_per_tick - 1) / g_settings.removals_per_tick
 			<< " s at " << g_settings.removals_per_tick << " per second. The log says when it is done.";
 		return out.str();
@@ -2002,17 +1899,6 @@ extern "C" __declspec(dllexport) void Plugin_Init()
 		&ANPCZoneManager_SpawnPatrolGroup_original);
 	if (!g_spawn_hooked)
 		PluginLog()->warn("Could not hook {}; SpawnPatrolGroup trace and spawn entries restore off", kSpawnPatrolGroupFunc);
-	g_inner_hooked[0] = AsaApi::GetHooks().SetHook(kIsValidEntryFunc, &Hook_ANPCZoneManager_IsValidNPCEntry,
-		&ANPCZoneManager_IsValidNPCEntry_original);
-	g_inner_hooked[1] = AsaApi::GetHooks().SetHook(kSpawnFromEntriesFunc, &Hook_ANPCZoneManager_SpawnFromEntries,
-		&ANPCZoneManager_SpawnFromEntries_original);
-	g_inner_hooked[2] = AsaApi::GetHooks().SetHook(kSpawnNpcFunc, &Hook_ANPCZoneManager_SpawnNPC, &ANPCZoneManager_SpawnNPC_original);
-	g_inner_hooked[3] = AsaApi::GetHooks().SetHook(kInjectLatentFunc, &Hook_AHibernationManager_InjectLatentSpawn,
-		&AHibernationManager_InjectLatentSpawn_original);
-	const char* const inner_names[4] = { kIsValidEntryFunc, kSpawnFromEntriesFunc, kSpawnNpcFunc, kInjectLatentFunc };
-	for (int i = 0; i < 4; ++i)
-		if (!g_inner_hooked[i])
-			PluginLog()->warn("Could not hook {}; its count in the SpawnPatrolGroup trace stays 0", inner_names[i]);
 }
 
 // Called by AsaApi when the plugin is unloaded.
@@ -2020,14 +1906,6 @@ extern "C" __declspec(dllexport) void Plugin_Unload()
 {
 	if (g_spawn_hooked)
 		AsaApi::GetHooks().DisableHook(kSpawnPatrolGroupFunc, &Hook_ANPCZoneManager_SpawnPatrolGroup);
-	if (g_inner_hooked[0])
-		AsaApi::GetHooks().DisableHook(kIsValidEntryFunc, &Hook_ANPCZoneManager_IsValidNPCEntry);
-	if (g_inner_hooked[1])
-		AsaApi::GetHooks().DisableHook(kSpawnFromEntriesFunc, &Hook_ANPCZoneManager_SpawnFromEntries);
-	if (g_inner_hooked[2])
-		AsaApi::GetHooks().DisableHook(kSpawnNpcFunc, &Hook_ANPCZoneManager_SpawnNPC);
-	if (g_inner_hooked[3])
-		AsaApi::GetHooks().DisableHook(kInjectLatentFunc, &Hook_AHibernationManager_InjectLatentSpawn);
 	AsaApi::GetCommands().RemoveOnTimerCallback(kTimerId);
 	AsaApi::GetCommands().RemoveConsoleCommand(kCmdReport);
 	AsaApi::GetCommands().RemoveConsoleCommand(kCmdClean);
